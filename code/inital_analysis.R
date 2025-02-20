@@ -6,7 +6,7 @@ library(purrr)
 
 # data cleaning ----
 psid_dat <- read_dta(
-  "data/20160995_PSID_regready_sept26.dta",
+  "../data/20160995_PSID_regready_sept26.dta",
   encoding = NULL,
   col_select = NULL,
   skip = 0,
@@ -49,8 +49,8 @@ fit_model <- function(df, type, sub){
   #browser()
   if(sub == 'M'){ df <- df %>% filter(ft == 1, wagesamp == 1, female == 0)}
   if(sub == 'F'){ df <- df %>% filter(ft == 1, wagesamp == 1, female == 1)}
-  dur_public <- df %>% select(236:248) %>% names() %>% str_c(., collapse = " + ")
-  buss_tran <- df %>% select(252:271) %>% names() %>% str_c(., collapse = " + ")
+  dur_public <- df %>% select(durables:professional) %>% names() %>% str_c(., collapse = " + ")
+  buss_tran <- df %>% select(business:production) %>% names() %>% str_c(., collapse = " + ")
   if(type == 'hc'){
   lm(lnrealwg ~ expf + expfsq + expp + exppsq + edyrs + ba + adv + smsa + northeast + northcentral + south + black + hisp + othrace, data = df, weights = famwgt)
   }else if(type == 'full'){
@@ -140,8 +140,8 @@ RI_estimator(cleaned_dat, "unadjust")
 fit_prop_model <- function(df, type){
   #browser()
   df <- df %>% filter(ft == 1, wagesamp == 1)
-  dur_public <- df %>% select(236:248) %>% names() %>% str_c(., collapse = " + ")
-  buss_tran <- df %>% select(252:271) %>% names() %>% str_c(., collapse = " + ")
+  dur_public <- df %>% select(durables:professional) %>% names() %>% str_c(., collapse = " + ")
+  buss_tran <- df %>% select(business:production) %>% names() %>% str_c(., collapse = " + ")
   if(type == 'hc'){
     glm(female ~ expf + expfsq + expp + exppsq + edyrs + ba + adv + smsa + northeast + northcentral + south + black + hisp + othrace, family = "quasibinomial", data = df, weights = famwgt)
   }else if(type == 'full'){
@@ -371,7 +371,7 @@ DR_estimator <- function(df, type){
            w = ifelse(female == 1, 0, odds*(1/fem_prb))) %>%
     filter(!is.na(pred_M)) %>%
     group_by(wave) %>%
-    mutate(RI_est = mean(female*pred_M)) %>%
+    mutate(RI_est = weighted.mean(female*pred_M, famwgt*female, na.rm = TRUE)) %>% #Brianna changed from mean()
     select(wave, intnum68, pernum68, pred_M, lnrealwg, female, w, fem_prb, RI_est, famwgt) %>%
     mutate(DR_1 = w*(lnrealwg - pred_M),
            DR_2 = ifelse(female == 0, 0, (pred_M - RI_est)/fem_prb)) %>% 
