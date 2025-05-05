@@ -262,6 +262,15 @@ data_gen <- function(n, true_ratio){
 
 # sim_data_test <- data_gen(500, 0.7)
 
+if(FALSE){
+  mod <- glm(female ~ eduyrs + expf + expf_sq + ba + adv + northeast + midwest + south + high_occ + low_occ, data =  sim_data_test, family = "quasibinomial")
+  sim_data_test %>%
+    mutate(pred = mod %>% predict(type='response')) %>% 
+    ggplot(aes(x = pred, fill = factor(female))) + 
+    geom_density(alpha = 0.5) +
+    labs(x = 'Predicted Probability of Being Female', fill = 'Female')
+}
+
 # Estimation Process ----
 sim_fit_model <- function(dat, type){
   if(type == 'full'){
