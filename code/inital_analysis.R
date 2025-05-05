@@ -3,10 +3,12 @@ library(tidyverse)
 library(dplyr)
 library(tidymodels)
 library(purrr)
+library(ggplot2)
+library(ggmosaic)
 
 # data cleaning ----
 psid_dat <- read_dta(
-  "../data/20160995_PSID_regready_sept26.dta",
+  "data/20160995_PSID_regready_sept26.dta",
   encoding = NULL,
   col_select = NULL,
   skip = 0,
@@ -44,7 +46,7 @@ years <- c(1981, 1990, 1999, 2007, 2009, 2011)
 
 
 
-### Method 1 ----
+# Method 1 ----
 fit_model <- function(df, type, sub){
   #browser()
   if(sub == 'M'){ df <- df %>% filter(ft == 1, wagesamp == 1, female == 0)}
@@ -136,7 +138,7 @@ RI_estimator(cleaned_dat, "unadjust")
 
 
 
-### Method 2 ----
+# Method 2 ----
 fit_prop_model <- function(df, type){
   #browser()
   df <- df %>% filter(ft == 1, wagesamp == 1)
@@ -228,32 +230,6 @@ weight_estimator(cleaned_dat, "unadjust")
 
 # Method 3 ----
 # Doubly Robust Estimator
-## W and Pr(A = 0)
-# dr_dat <- cleaned_dat %>% group_by(wave) %>%
-#   nest() %>%
-#   mutate(ps_mod_hc = map(data, ~fit_prop_model(.x, type = "hc")),
-#          fem_prb = map(data, ~mean(.x$female, na.rm = TRUE))) %>% 
-#   mutate(ps_hc = map2(data, ps_mod_hc, ~predict(.y, newdata = .x, type = "response"))) %>% 
-#   unnest(c(data, ps_hc, fem_prb)) %>% 
-#   mutate(odds = ps_hc/(1 - ps_hc),
-#          wt = ifelse(female == 1, 0, odds*(1/fem_prb)))
-
-
-## Y - E[Y|A = 1, X]
-# male_only <- cleaned_dat %>% filter(ft == 1, wagesamp == 1, female == 0)
-# predict_m <- function(model, df){
-#   df_m <- df %>% filter(female == 0)
-#   predict(model, newdata = df_m)
-# }
-# cleaned_dat %>% group_by(wave) %>%
-#   mutate(pred_M_hc = 0) %>% 
-#   nest() %>%
-#   mutate(mod_M_hc = map(data, ~fit_model(.x, type = 'hc', sub = 'M'))) %>%
-#   mutate(pred_M_hc = map2(data, mod_M_hc, ~predict_m(model = .y, df = .x))) %>% 
-#   unnest(c(data, pred_M_hc)) %>% 
-#   mutate(resid_M_hc = lnrealwg - pred_M_hc) %>% 
-#   select(lnrealwg, pred_M_hc, resid_M_hc)
-
 cleaned_dat %>% group_by(wave) %>%
   filter(ft == 1, wagesamp == 1) %>% 
   nest() %>%
@@ -279,79 +255,6 @@ cleaned_dat %>% group_by(wave) %>%
             mean_female_lnwage = sum(female*lnrealwg, na.rm=TRUE)/sum(female, na.rm=TRUE)) %>% 
   mutate(ratio = exp(mean_female_lnwage-DR_est))
 
-# con_exp <- cleaned_dat %>% group_by(wave) %>%
-#   filter(ft == 1, wagesamp == 1, female == 0) %>% 
-#   nest() %>%
-#   mutate(mod_M_hc = map(data,~fit_model(.x,type = 'hc',sub = 'M'))) %>%
-#   mutate(pred_M_hc = map2(data, mod_M_hc, ~predict(.y, newdata = .x))) %>% 
-#   unnest(c(data, pred_M_hc)) %>% 
-#   mutate(resid_M_hc = lnrealwg - pred_M_hc) %>% 
-#   select(wave, intnum68, pernum68, pred_M_hc)
-# 
-# dr_dat <- dr_dat %>% left_join(con_exp, by = c("wave", "intnum68", "pernum68")) %>% 
-#   mutate(pred_M_hc = replace_na(pred_M_hc, 0))
-
-
-## E[E[Y|A = 1, X] | A = 0]
-# dr_dat <- dr_dat %>% group_by(wave) %>%
-#   filter(ft == 1, wagesamp == 1) %>%
-#   nest() %>%
-#   mutate(mod_M_hc = map(data,~fit_model(.x,type = 'hc',sub = 'M'))) %>%
-#   mutate(pred_hc = map2(data, mod_M_hc, ~predict(.y, newdata = .x))) %>% 
-#   unnest(c(data, pred_hc))
-
-## combined
-# dr_dat_cleaned <- dr_dat %>% select(wave, intnum68, pernum68, female, wt, fem_prb, lnrealwg, pred_M_hc, pred_hc)
-# 
-# dr_dat_cleaned %>% 
-#   mutate(dr_1 = wt*(lnrealwg - pred_M_hc),
-#          dr_2 = ifelse(female == 0, 0, (pred_M_hc - pred_hc)/fem_prb)
-#          ) %>% 
-#   mutate(dr_final = dr_1 + dr_2 + pred_hc) %>%
-#   group_by(wave) %>% 
-#   mutate(dr_cf = mean(dr_final))
-  
-# 
-# dr_estimator <- function(df, type){
-#   # W and Pr(A = 0)
-#   dr_dat <- df %>% group_by(wave) %>%
-#     nest() %>%
-#     mutate(ps_mod_hc = map(data, ~fit_prop_model(.x, type = type)),
-#            fem_prb = map(data, ~mean(.x$female, na.rm = TRUE))) %>% 
-#     mutate(ps_hc = map2(data, ps_mod_hc, ~predict(.y, newdata = .x, type = "response"))) %>% 
-#     unnest(c(data, ps_hc, fem_prb)) %>% 
-#     mutate(odds = ps_hc/(1 - ps_hc),
-#            wt = ifelse(female == 1, 0, odds*(1/fem_prb)))
-#   
-#   # Y - E[Y|A = 1, X]
-#   con_exp <- df %>% group_by(wave) %>%
-#     filter(ft == 1, wagesamp == 1, female == 0) %>% 
-#     nest() %>%
-#     mutate(mod_M_hc = map(data, ~fit_model(.x, type = type, sub = 'M'))) %>%
-#     mutate(pred_M_hc = map2(data, mod_M_hc, ~predict(.y, newdata = .x))) %>% 
-#     unnest(c(data, pred_M_hc)) %>% 
-#     mutate(resid_M_hc = lnrealwg - pred_M_hc) %>% 
-#     select(wave, intnum68, pernum68, pred_M_hc)
-#   dr_dat <- dr_dat %>% left_join(con_exp, by = c("wave", "intnum68", "pernum68")) %>% 
-#     mutate(pred_M_hc = replace_na(pred_M_hc, 0))
-#   
-#   # E[E[Y|A = 1, X] | A = 0]
-#   dr_dat <- dr_dat %>% group_by(wave) %>%
-#     filter(ft == 1, wagesamp == 1) %>%
-#     nest() %>%
-#     mutate(mod_M_hc = map(data, ~fit_model(.x,type = type, sub = 'M'))) %>%
-#     mutate(pred_hc = map2(data, mod_M_hc, ~predict(.y, newdata = .x))) %>% 
-#     unnest(c(data, pred_hc))
-# 
-#   dr_dat_cleaned <- dr_dat %>% select(wave, intnum68, pernum68, female, wt, fem_prb, lnrealwg, pred_M_hc, pred_hc)
-#   dr_dat_cleaned %>% 
-#     mutate(dr_1 = wt*(lnrealwg - pred_M_hc),
-#            dr_2 = ifelse(female == 0, 0, (pred_M_hc - pred_hc)/fem_prb)
-#     ) %>% 
-#     mutate(dr_final = dr_1 + dr_2 + pred_hc) %>% 
-#     group_by(wave) %>% 
-#     mutate(dr_cf = mean(dr_final))
-# }
 
 # function
 DR_estimator <- function(df, type){
@@ -408,12 +311,20 @@ final_tbl <- rbind(unadj_tbl, hc_tbl, full_tbl)
 ## visualizations
 ### by estimation method
 final_tbl %>% 
+  filter(wave %in% c(1981, 1990, 1999, 2011)) %>% 
   mutate(adjustment = fct_relevel(adjustment, c('unadjust','hc','full'))) %>%
+  mutate(lab = str_c(round(ratio_RI, 2)*100,'%')) %>%
   ggplot(aes(x = factor(wave), y = ratio_RI, fill = adjustment)) +
   geom_col(position = 'dodge') +
-  scale_y_continuous(limits=c(0,1)) +
+  geom_text(aes(label = lab), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, size = 4) +
+  scale_y_continuous(labels = scales::percent) +
+  coord_cartesian(ylim=c(0.5,.95))+
+  scale_x_discrete(labels = c("1980", "1989", "1998", "2010")) +
+  scale_fill_manual(values = c("#4e83bd", "#c1524d", "#9dbb59"),guide = FALSE) +
   theme_classic() +
-  labs(x = "Wave", y = "log wage ratio", title = "RI estimator")
+  labs(x = NULL, y = NULL,title = "Female to Male Wage Ratio (RI estimator)")
 
 final_tbl %>% 
   mutate(adjustment = fct_relevel(adjustment, c('unadjust','hc','full'))) %>%
@@ -437,15 +348,20 @@ long_tbl <- final_tbl %>% select(wave, ratio_DR, ratio_wt, ratio_RI, adjustment)
   pivot_longer(cols = c(ratio_DR, ratio_wt, ratio_RI), names_to = "ratio")
 
 long_tbl %>% 
+  #filter(wave %in% c(1981, 1990, 1999, 2011)) %>% 
   mutate(ratio = fct_relevel(ratio, c('ratio_RI','ratio_wt','ratio_DR'))) %>%
   ggplot(aes(x = wave, y = value, color = ratio)) +
-  geom_line() +
-  geom_hline(yintercept = c(.77,1), color = 'grey') +
-  scale_y_continuous(limits=c(0.5,1)) +
-  scale_fill_discrete(name = "Estimations", labels = c("RI", "Weighting", "DR")) +
+  geom_line(linewidth = 1.5) +
+  geom_text(x = 1982,y = .78,label = '77%',color = 'darkgrey') +
+  geom_text(x = 1983.5,y = 1.01,label = 'No Gap',color = 'darkgrey') +
+  geom_hline(yintercept = c(.77,1), color = 'darkgrey') +
+  scale_color_manual(values = c("#4e83bd", "#c1524d", "#9dbb59"),name = "Estimators", labels = c("RI", "Weighting", "DR")) +
+  scale_y_continuous(labels = scales::percent) +
+  coord_cartesian(ylim=c(0.5,1.01))+
+  scale_x_continuous(breaks = c(1981, 1990, 1999, 2007, 2009, 2011), labels = c("1980", "1989", "1998", "2006", "2008", "2010")) +
   theme_classic() +
-  labs(x = "wave", y = "ratio") +
-  facet_grid(~adjustment) +
+  labs(x = NULL, y = "", title = "Female to Male Wage Ratio (By Estimator)") +
+  facet_grid(~adjustment, labeller = labeller(adjustment = c("full" = "full", "hc" = "human captial", "unadjust" = "unadjusted"))) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
